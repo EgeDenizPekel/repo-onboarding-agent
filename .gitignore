@@ -1,0 +1,53 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+
+# Training data - can be large, regenerate from collect_data.py
+fine_tuning/data/
+!fine_tuning/data/.gitkeep
+
+# Fine-tuned model artifacts (large binary files)
+fine_tuning/fused_model/
+fine_tuning/Modelfile
+*.gguf
+*.safetensors
+
+# MLX training data (generated from fine_tuning/data/)
+fine_tuning/mlx_data/
+
+# Cloned repos (managed by the agent at runtime)
+/tmp/repo-onboarding-agent/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# macOS
+.DS_Store
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# uv
+.uv/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+.next/
+
+# Eval results (large, regenerate with benchmark.py)
+eval/results.json
+
+# Docs (private, not for public repo)
+project-plan-repo-onboarding-agent.md
+agent.instructions.md
+CLAUDE.md

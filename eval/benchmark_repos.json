@@ -1,0 +1,22 @@
+[
+  {"repo": "django/django",             "language": "Python",     "description": "High-level Python web framework"},
+  {"repo": "aio-libs/aiohttp",          "language": "Python",     "description": "Async HTTP client/server framework"},
+  {"repo": "scrapy/scrapy",             "language": "Python",     "description": "Web crawling and scraping framework"},
+  {"repo": "theskumar/python-dotenv",   "language": "Python",     "description": "Reads key-value pairs from .env files"},
+  {"repo": "nestjs/nest",               "language": "TypeScript", "description": "Progressive Node.js framework"},
+  {"repo": "typeorm/typeorm",           "language": "TypeScript", "description": "ORM for TypeScript and JavaScript"},
+  {"repo": "vitejs/vite",               "language": "TypeScript", "description": "Next-generation frontend build tool"},
+  {"repo": "sveltejs/svelte",           "language": "TypeScript", "description": "Cybernetically enhanced web apps compiler"},
+  {"repo": "expressjs/express",         "language": "JavaScript", "description": "Fast, unopinionated web framework for Node.js"},
+  {"repo": "koajs/koa",                 "language": "JavaScript", "description": "Expressive HTTP middleware framework for Node.js"},
+  {"repo": "graphql/graphql-js",        "language": "JavaScript", "description": "A reference implementation of GraphQL for JavaScript"},
+  {"repo": "gofiber/fiber",             "language": "Go",         "description": "Express-inspired web framework written in Go"},
+  {"repo": "google/wire",               "language": "Go",         "description": "Compile-time dependency injection for Go"},
+  {"repo": "dtolnay/syn",               "language": "Rust",       "description": "Parser for Rust source code"},
+  {"repo": "rust-lang/cargo",           "language": "Rust",       "description": "The Rust package manager"},
+  {"repo": "ruby/rake",                 "language": "Ruby",       "description": "Ruby Make - a task runner DSL"},
+  {"repo": "hanami/hanami",             "language": "Ruby",       "description": "The web, with simplicity - Ruby web framework"},
+  {"repo": "mockito/mockito",           "language": "Java",       "description": "Tasty mocking framework for unit tests in Java"},
+  {"repo": "junit-team/junit4",         "language": "Java",       "description": "A unit testing framework for Java"},
+  {"repo": "symfony/console",           "language": "PHP",        "description": "Symfony Console component for CLI applications"}
+]
