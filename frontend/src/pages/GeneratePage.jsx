@@ -129,23 +129,66 @@ function IterationTrace({ iterationLog }) {
 }
 
 function DocDrawer({ doc, onClose }) {
+  const articleRef = useRef(null)
+
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
 
+  function handleDownloadPdf() {
+    const html = articleRef.current?.innerHTML
+    if (!html) return
+    const win = window.open('', '_blank')
+    win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Onboarding Document</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 24px; color: #1e293b; line-height: 1.7; }
+    h1, h2, h3, h4 { color: #0f172a; margin-top: 1.5em; }
+    h1 { font-size: 1.8em; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.3em; }
+    h2 { font-size: 1.4em; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.2em; }
+    code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; font-family: monospace; }
+    pre { background: #f1f5f9; padding: 16px; border-radius: 8px; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    a { color: #6366f1; }
+    ul, ol { padding-left: 1.5em; }
+    li { margin: 0.25em 0; }
+    blockquote { border-left: 4px solid #e2e8f0; margin: 0; padding-left: 1em; color: #64748b; }
+    @media print { body { margin: 20px; } }
+  </style>
+</head>
+<body>${html}</body>
+</html>`)
+    win.document.close()
+    win.focus()
+    setTimeout(() => { win.print() }, 400)
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/50" onClick={onClose} />
-      <div className="w-full max-w-3xl bg-slate-900 border-l border-slate-700 overflow-y-auto p-8">
-        <div className="flex justify-between items-center mb-6">
+      <div className="w-full max-w-3xl bg-slate-900 border-l border-slate-700 flex flex-col">
+        <div className="flex justify-between items-center px-8 py-5 border-b border-slate-700 shrink-0">
           <h2 className="text-lg font-semibold">Onboarding Document</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
         </div>
-        <article className="prose prose-invert prose-sm max-w-none">
-          <ReactMarkdown>{doc}</ReactMarkdown>
-        </article>
+        <div className="flex-1 overflow-y-auto px-8 py-6">
+          <article ref={articleRef} className="prose prose-invert prose-sm max-w-none">
+            <ReactMarkdown>{doc}</ReactMarkdown>
+          </article>
+        </div>
+        <div className="shrink-0 px-8 py-4 border-t border-slate-700">
+          <button
+            onClick={handleDownloadPdf}
+            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            Download as PDF
+          </button>
+        </div>
       </div>
     </div>
   )
