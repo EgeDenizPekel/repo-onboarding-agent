@@ -1,6 +1,10 @@
 # Repo Onboarding Agent
 
-A LangGraph-based AI agent that autonomously explores any GitHub repository - reading files, following imports, mapping architecture - and produces a structured developer onboarding guide. Includes a reflection loop that continuously self-evaluates its understanding before synthesizing the final document, a fine-tuned local model option, a full eval framework, and a React frontend with live agent progress streaming.
+> An agentic code-understanding system built to explore how reflection loops affect repository onboarding quality. Uses LangGraph for orchestration, a fine-tuned Qwen2.5-7B for exploration decisions, and GPT-4o for synthesis.
+
+Most LLM-based repo summarizers read a README and call it done. This agent actually explores the codebase - following imports, mapping architecture, and scoring its own understanding in a reflection loop - until it can describe **how the code works**, not just what it does.
+
+This is an engineering experiment, not a production product. The goal was to design the system, evaluate it with a controlled ablation, and ship something that demonstrates the tradeoffs between single-pass and iterative exploration strategies.
 
 ## What it does
 
@@ -8,8 +12,8 @@ Point it at any GitHub repo URL. The agent:
 
 1. Clones the repo locally
 2. Reads the README, dependency files, and entry points to seed exploration
-3. Iteratively selects which files to read next (prioritizing entry points and most-imported modules)
-4. Summarizes each file and updates its import graph
+3. Uses an LLM to decide which files to read next (prioritizing entry points and most-imported modules)
+4. Summarizes each file and builds a cross-file import graph
 5. Scores its own architectural understanding (0.0-1.0) after each batch
 6. Loops back to explore more files if the score is below 0.8 (up to 8 iterations max)
 7. Synthesizes a full onboarding document, validates every file reference with `os.path.exists`, and refines any broken paths

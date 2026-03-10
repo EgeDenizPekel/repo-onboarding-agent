@@ -18,11 +18,11 @@ function ScoreBar({ score }) {
   const pct = Math.round((score ?? 0) * 100)
   const color = pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-500'
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-sm font-mono text-slate-300 w-10 text-right">{pct}%</span>
+      <span className="text-xs font-mono text-slate-400 w-8 text-right">{pct}%</span>
     </div>
   )
 }
@@ -36,9 +36,7 @@ function NodeTimeline({ events }) {
           <div className="flex-1 min-w-0">
             <p className="text-sm text-slate-300">{NODE_LABELS[ev.node] ?? ev.node}</p>
             {ev.understanding_score != null && (
-              <div className="mt-1">
-                <ScoreBar score={ev.understanding_score} />
-              </div>
+              <div className="mt-1"><ScoreBar score={ev.understanding_score} /></div>
             )}
             {ev.files_explored?.length > 0 && (
               <div className="mt-1 flex flex-wrap gap-1">
@@ -48,6 +46,82 @@ function NodeTimeline({ events }) {
               </div>
             )}
           </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function IterationTrace({ iterationLog }) {
+  const [expanded, setExpanded] = useState(null)
+
+  if (!iterationLog?.length) return (
+    <p className="text-xs text-slate-600 italic">No iteration trace available.</p>
+  )
+
+  return (
+    <div className="space-y-2">
+      {iterationLog.map((iter, i) => (
+        <div key={i}>
+          <button
+            className="w-full text-left bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 rounded-lg p-3 transition-colors"
+            onClick={() => setExpanded(expanded === i ? null : i)}
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-semibold text-slate-300">Iteration {iter.iteration}</span>
+              <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${
+                iter.understanding_score >= 0.8 ? 'bg-emerald-900 text-emerald-300' :
+                iter.understanding_score >= 0.5 ? 'bg-amber-900 text-amber-300' : 'bg-red-900 text-red-300'
+              }`}>{Math.round(iter.understanding_score * 100)}%</span>
+            </div>
+            <ScoreBar score={iter.understanding_score} />
+            {iter.files_explored?.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {iter.files_explored.slice(0, 5).map((f, fi) => (
+                  <span key={fi} className="px-1.5 py-0.5 text-xs bg-slate-700 text-slate-400 rounded font-mono truncate max-w-[200px]">{f}</span>
+                ))}
+                {iter.files_explored.length > 5 && (
+                  <span className="text-xs text-slate-600">+{iter.files_explored.length - 5} more</span>
+                )}
+              </div>
+            )}
+          </button>
+
+          {expanded === i && (
+            <div className="mt-1 ml-0 bg-slate-900 border border-slate-700/50 rounded-lg p-4 space-y-4">
+              {iter.files_explored?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 mb-2">Files explored ({iter.files_explored.length})</p>
+                  <div className="flex flex-col gap-1">
+                    {iter.files_explored.map((f, fi) => (
+                      <div key={fi} className="flex items-center gap-2">
+                        <span className="text-xs text-slate-600 font-mono w-4 shrink-0">{fi + 1}.</span>
+                        <span className="text-xs font-mono text-slate-300 bg-slate-800 px-2 py-0.5 rounded">{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {iter.reflection_notes && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 mb-1">Reflection</p>
+                  <p className="text-xs text-slate-400 leading-relaxed">{iter.reflection_notes}</p>
+                </div>
+              )}
+              {iter.architecture_notes_added?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 mb-2">Architecture insights</p>
+                  <ul className="space-y-1">
+                    {iter.architecture_notes_added.map((note, j) => (
+                      <li key={j} className="flex gap-2 text-xs text-slate-300">
+                        <span className="text-indigo-400 shrink-0">-</span>{note}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -77,7 +151,12 @@ function DocDrawer({ doc, onClose }) {
   )
 }
 
-function JobHistoryItem({ job, onSelect }) {
+function JobHistoryItem({ job }) {
+  const [expanded, setExpanded] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [drawerDoc, setDrawerDoc] = useState(null)
+
   const statusColor = {
     complete: 'text-emerald-400',
     error: 'text-red-400',
@@ -85,25 +164,86 @@ function JobHistoryItem({ job, onSelect }) {
     pending: 'text-slate-400',
   }[job.status] ?? 'text-slate-400'
 
+  async function toggle() {
+    if (!expanded && !detail && job.status === 'complete') {
+      setLoading(true)
+      const res = await fetch(`${API}/jobs/${job.job_id}`)
+      const data = await res.json()
+      setDetail(data)
+      setLoading(false)
+    }
+    setExpanded(e => !e)
+  }
+
+  const iterLog = detail?.result?.iteration_log ?? []
+  const doc = detail?.result?.onboarding_document
+
   return (
-    <button
-      onClick={() => onSelect(job.job_id)}
-      className="w-full text-left px-4 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-slate-200 truncate">{job.repo_url}</span>
-        <span className={`text-xs font-medium shrink-0 ${statusColor}`}>{job.status}</span>
-      </div>
-      <p className="text-xs text-slate-500 mt-0.5">{new Date(job.created_at).toLocaleString()}</p>
-    </button>
+    <div className="rounded-lg border border-slate-700/50 overflow-hidden">
+      <button
+        onClick={toggle}
+        className="w-full text-left px-4 py-3 bg-slate-800 hover:bg-slate-700/80 transition-colors"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm text-slate-200 truncate">{job.repo_url}</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className={`text-xs font-medium ${statusColor}`}>{job.status}</span>
+            <span className="text-slate-600 text-xs">{expanded ? '▲' : '▼'}</span>
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mt-0.5">{new Date(job.created_at).toLocaleString()}</p>
+      </button>
+
+      {expanded && (
+        <div className="bg-slate-900 border-t border-slate-700/50 p-4 space-y-4">
+          {loading && <p className="text-xs text-slate-500">Loading details...</p>}
+
+          {job.status === 'error' && (
+            <p className="text-xs text-red-400">{detail?.error ?? 'Job failed.'}</p>
+          )}
+
+          {detail && iterLog.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  Exploration Trace - {iterLog.length} iteration{iterLog.length !== 1 ? 's' : ''}
+                </p>
+                {doc && (
+                  <button
+                    onClick={() => setDrawerDoc(doc)}
+                    className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition-colors"
+                  >
+                    View Document
+                  </button>
+                )}
+              </div>
+              <IterationTrace iterationLog={iterLog} />
+            </div>
+          )}
+
+          {detail && iterLog.length === 0 && doc && (
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-500">No reflection iterations (baseline config).</p>
+              <button
+                onClick={() => setDrawerDoc(doc)}
+                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md transition-colors"
+              >
+                View Document
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {drawerDoc && <DocDrawer doc={drawerDoc} onClose={() => setDrawerDoc(null)} />}
+    </div>
   )
 }
 
 export default function GeneratePage() {
   const [repoUrl, setRepoUrl] = useState('')
   const [focusHint, setFocusHint] = useState('')
-  const [jobId, setJobId] = useState(null)
-  const [status, setStatus] = useState(null) // pending | running | complete | error
+  const [status, setStatus] = useState(null)
   const [events, setEvents] = useState([])
   const [doc, setDoc] = useState(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -145,12 +285,7 @@ export default function GeneratePage() {
       fetch(`${API}/jobs`).then(r => r.json()).then(d => setHistory(d.jobs ?? []))
     })
     es.addEventListener('error', (e) => {
-      try {
-        const data = JSON.parse(e.data)
-        setError(data.message)
-      } catch {
-        setError('Connection error')
-      }
+      try { setError(JSON.parse(e.data).message) } catch { setError('Connection error') }
       setStatus('error')
       es.close()
     })
@@ -159,7 +294,6 @@ export default function GeneratePage() {
   async function handleSubmit(e) {
     e.preventDefault()
     if (!repoUrl.trim()) return
-    setJobId(null)
     setStatus('pending')
     setEvents([])
     setDoc(null)
@@ -171,29 +305,20 @@ export default function GeneratePage() {
       body: JSON.stringify({ repo_url: repoUrl.trim(), focus_hint: focusHint.trim() }),
     })
     const { job_id } = await res.json()
-    setJobId(job_id)
     setStatus('running')
     startStream(job_id)
   }
 
-  async function loadJob(id) {
-    const res = await fetch(`${API}/jobs/${id}`)
-    const job = await res.json()
-    setJobId(id)
-    setStatus(job.status)
-    setEvents([])
-    setError(job.error ?? null)
-    if (job.status === 'complete' && job.result) {
-      setDoc(job.result.onboarding_document ?? null)
-    } else if (job.status === 'running' || job.status === 'pending') {
-      startStream(id)
-    }
-  }
-
   return (
     <div className="max-w-3xl mx-auto px-6 py-10">
-      <h1 className="text-2xl font-bold mb-1">Generate Onboarding Guide</h1>
-      <p className="text-slate-400 text-sm mb-8">Paste a GitHub repo URL and the agent will explore it and produce a developer onboarding document.</p>
+      {/* Hero */}
+      <h1 className="text-2xl font-bold mb-2">Repo Onboarding Agent</h1>
+      <p className="text-slate-300 text-sm mb-1 leading-relaxed">
+        Most LLM-based summarizers read a README and call it done. This agent actually explores the codebase - following imports, mapping architecture, and scoring its own understanding in a reflection loop - until it can describe <span className="text-indigo-400 font-medium">how the code works</span>, not just what it does.
+      </p>
+      <p className="text-slate-500 text-xs mb-8 leading-relaxed">
+        Built to explore how reflection loops affect repository onboarding quality. Uses LangGraph for orchestration, a fine-tuned Qwen2.5-7B for exploration decisions, and GPT-4o for synthesis.
+      </p>
 
       <form onSubmit={handleSubmit} className="space-y-4 mb-10">
         <div>
@@ -268,7 +393,7 @@ export default function GeneratePage() {
           <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Previous Jobs</h2>
           <div className="space-y-2">
             {history.map(job => (
-              <JobHistoryItem key={job.job_id} job={job} onSelect={loadJob} />
+              <JobHistoryItem key={job.job_id} job={job} />
             ))}
           </div>
         </div>
