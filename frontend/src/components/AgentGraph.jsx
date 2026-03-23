@@ -2,16 +2,17 @@ import { useState } from 'react'
 
 const CONFIG_ACTIVE_NODES = {
   baseline:      new Set(['clone_repo', 'initialize', 'synthesize', 'validate', 'refine']),
-  no_reflection: new Set(['clone_repo', 'initialize', 'planner', 'explorer', 'synthesize', 'validate', 'refine']),
-  full:          new Set(['clone_repo', 'initialize', 'planner', 'explorer', 'reflector', 'synthesize', 'validate', 'refine']),
+  no_reflection: new Set(['clone_repo', 'initialize', 'index_repo', 'planner', 'explorer', 'synthesize', 'validate', 'refine']),
+  full:          new Set(['clone_repo', 'initialize', 'index_repo', 'planner', 'explorer', 'reflector', 'synthesize', 'validate', 'refine']),
 }
 
 const NODE_DESCRIPTIONS = {
   clone_repo:  'Clones the GitHub repository locally via GitPython. Extracts the full file tree, detects the primary language and framework, and sets up the working directory for the rest of the agent.',
   initialize:  'Reads the README and dependency files (package.json, pyproject.toml, go.mod, etc.) to understand the project at a high level. Seeds the initial exploration queue with entry point candidates.',
-  planner:     'Uses an LLM to decide which 3-5 files to read next. Prioritizes entry points, files frequently imported by already-visited files, and gaps identified in the last reflection cycle.',
-  explorer:    'Reads each queued file (capped at 4,000 tokens), generates a concise summary with an LLM, and extracts import statements to build the cross-file import graph.',
-  reflector:   "Scores the agent's current architectural understanding from 0.0 to 1.0. Identifies what is understood well and what gaps remain. If score < 0.8 and iterations remain, loops back to the planner.",
+  index_repo:  'RAG 2.0 - Embeds every file in the repo (path + first 300 chars) into a FAISS vector index using text-embedding-3-small. Also initializes the Neo4j graph store. Runs once per job; subsequent planner calls query both for hybrid retrieval.',
+  planner:     'Hybrid retrieval: queries the FAISS index with reflection-identified gaps (semantic search) and Neo4j for the graph frontier (unvisited files imported by visited ones). Passes both signals to the LLM alongside import-graph centrality for final file selection.',
+  explorer:    'Reads each queued file (capped at 4,000 tokens), generates a concise summary with an LLM, and extracts import statements. Syncs new import edges to Neo4j as (:File)-[:IMPORTS]->(:File) relationships.',
+  reflector:   "Scores the agent's current architectural understanding from 0.0 to 1.0. Identifies what is understood well and what gaps remain. Gap descriptions become the semantic search query for the next planner call.",
   synthesize:  'Generates the full developer onboarding document from all accumulated state - file summaries, import graph, entry points, architecture notes, and reflection history.',
   validate:    'Deterministically checks every file path referenced in the document using os.path.exists. No LLM involved - this is a hard correctness check to catch hallucinated file references.',
   refine:      'Re-runs synthesis with the list of broken file references explicitly flagged, asking the LLM to correct or remove them from the document.',
@@ -20,6 +21,7 @@ const NODE_DESCRIPTIONS = {
 const NODE_LABELS = {
   clone_repo: 'Clone Repo',
   initialize: 'Initialize',
+  index_repo: 'Index Repo',
   planner:    'Planner',
   explorer:   'Explorer',
   reflector:  'Reflector',
@@ -38,12 +40,13 @@ const LOOP_X = 270  // x for the loop-back line on the right
 const NODES = [
   { id: 'clone_repo', y: 0   },
   { id: 'initialize', y: 1   },
-  { id: 'planner',    y: 2   },
-  { id: 'explorer',   y: 3   },
-  { id: 'reflector',  y: 4   },
-  { id: 'synthesize', y: 5.8 },
-  { id: 'validate',   y: 6.8 },
-  { id: 'refine',     y: 7.8 },
+  { id: 'index_repo', y: 2   },
+  { id: 'planner',    y: 3   },
+  { id: 'explorer',   y: 4   },
+  { id: 'reflector',  y: 5   },
+  { id: 'synthesize', y: 6.8 },
+  { id: 'validate',   y: 7.8 },
+  { id: 'refine',     y: 8.8 },
 ]
 
 function nodeY(slot) { return 24 + slot * GAP }
@@ -53,7 +56,7 @@ export default function AgentGraph({ activeConfig }) {
   const active = CONFIG_ACTIVE_NODES[activeConfig] ?? CONFIG_ACTIVE_NODES.full
   const [tooltip, setTooltip] = useState(null)
 
-  const SVG_H = nodeY(7.8) + NODE_H + 24
+  const SVG_H = nodeY(8.8) + NODE_H + 24
   const SVG_W = 340
 
   // edge helpers
@@ -62,7 +65,8 @@ export default function AgentGraph({ activeConfig }) {
 
   const mainEdges = [
     ['clone_repo', 'initialize'],
-    ['initialize', 'planner'],
+    ['initialize', 'index_repo'],
+    ['index_repo', 'planner'],
     ['planner',    'explorer'],
     ['explorer',   'reflector'],
     ['synthesize', 'validate'],
@@ -117,8 +121,8 @@ export default function AgentGraph({ activeConfig }) {
 
         {/* reflector -> synthesize (longer gap, with label) */}
         {(() => {
-          const rY = nodeY(4) + NODE_H
-          const sY = nodeY(5.8) - 4
+          const rY = nodeY(5) + NODE_H
+          const sY = nodeY(6.8) - 4
           const isActive = active.has('reflector') && active.has('synthesize')
           const midY = (rY + sY) / 2
           return (

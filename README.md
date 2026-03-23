@@ -1,10 +1,10 @@
 # Repo Onboarding Agent
 
-> An agentic code-understanding system built to explore how reflection loops affect repository onboarding quality. Uses LangGraph for orchestration, a fine-tuned Qwen2.5-7B for exploration decisions, and GPT-4o for synthesis.
+> An agentic code-understanding system that explores GitHub repositories using a reflection loop, hybrid RAG retrieval, and a Neo4j knowledge graph to produce structured developer onboarding guides.
 
-Most LLM-based repo summarizers read a README and call it done. This agent actually explores the codebase - following imports, mapping architecture, and scoring its own understanding in a reflection loop - until it can describe **how the code works**, not just what it does.
+Most LLM-based repo summarizers read a README and call it done. This agent actually explores the codebase - following imports, mapping architecture, scoring its own understanding, and using vector + graph retrieval to close knowledge gaps - until it can describe **how the code works**, not just what it does.
 
-This is an engineering experiment, not a production product. The goal was to design the system, evaluate it with a controlled ablation, and ship something that demonstrates the tradeoffs between single-pass and iterative exploration strategies.
+Built as a portfolio project covering the full GenAI stack: agent design, fine-tuning, hybrid RAG (Phase 2), GraphRAG, and LLM-as-a-Judge evaluation.
 
 ## What it does
 
@@ -12,11 +12,35 @@ Point it at any GitHub repo URL. The agent:
 
 1. Clones the repo locally
 2. Reads the README, dependency files, and entry points to seed exploration
-3. Uses an LLM to decide which files to read next (prioritizing entry points and most-imported modules)
-4. Summarizes each file and builds a cross-file import graph
-5. Scores its own architectural understanding (0.0-1.0) after each batch
-6. Loops back to explore more files if the score is below 0.8 (up to 8 iterations max)
-7. Synthesizes a full onboarding document, validates every file reference with `os.path.exists`, and refines any broken paths
+3. **Builds a FAISS vector index** (RAG 2.0) and initializes the **Neo4j import graph**
+4. Plans which files to read next using **hybrid retrieval**: semantic search (FAISS) + graph frontier (Neo4j) + import-graph centrality
+5. Summarizes each file, extracts imports, and **syncs edges to Neo4j** as `(:File)-[:IMPORTS]->(:File)`
+6. Scores its own architectural understanding (0.0-1.0) after each batch; **reflection notes become the semantic search query** for the next iteration (self-correcting loop)
+7. Loops back to explore more files if score < 0.8 (up to 8 iterations max)
+8. Synthesizes a full onboarding document, validates every file reference with `os.path.exists`, and refines any broken paths
+
+## Phase 2: Knowledge Augmentation (GenAI Course Weeks 5-7)
+
+### Week 5 - RAG 2.0: Self-correcting retrieval + hybrid search
+
+- **Index node** (`index_repo`): embeds all repo files (path + 300 char preview) into FAISS using `text-embedding-3-small` once per run (~$0.001)
+- **Hybrid planner**: on each iteration, queries FAISS with reflection-identified gaps (semantic) + runs Neo4j frontier query (graph) + uses import-graph centrality (keyword). All three signals passed to GPT-4o for final file selection
+- **Self-correcting loop**: reflector identifies gaps in natural language -> gap text becomes the vector search query -> semantically similar files retrieved -> explored -> re-scored
+
+### Week 6 - GraphRAG: Neo4j knowledge graph
+
+- **Schema**: `(:File {path, run_id, visited, repo_path})-[:IMPORTS]->(:File)`, one graph per run via `run_id`
+- **Centrality query** (Cypher): `MATCH (f)<-[:IMPORTS]-() WHERE f.run_id=$id RETURN f.path, count(*) ORDER BY count DESC` - replaces dict heuristic
+- **Frontier query** (Cypher): `MATCH (visited)-[:IMPORTS]->(unvisited) WHERE visited.visited=true AND NOT unvisited.visited=true RETURN DISTINCT unvisited.path` - files one hop from explored code, not yet read
+- **Live sync**: explorer node writes new import edges to Neo4j after each batch
+- **Frontend**: import graph visualized as SVG with concentric ring layout (most-imported files at center, frontier stubs at edges)
+- **Browser UI**: `http://localhost:7474` (neo4j / repoagent123)
+
+### Week 7 - LLM-as-a-Judge evaluation
+
+- GPT-4o judge scores each onboarding document 1-5 on clarity, completeness, and usefulness - always a different model than the one evaluated
+- **3 custom metrics**: architecture coverage (fraction of high-import modules mentioned), file ref accuracy (hallucination rate for paths), judge score
+- **20-repo ablation**: 3 configurations (baseline / no-reflection / full) isolate the effect of each component
 
 ## Benchmark results (20 repos, 3 configurations)
 
@@ -26,25 +50,30 @@ Point it at any GitHub repo URL. The agent:
 | No reflection (1 pass) | 4.65 | 21.3% | 98.8% |
 | Full (reflection loop) | 4.50 | **29.9%** | 96.6% |
 
-The reflection loop is the key driver of architecture coverage - understanding of architectural components improves from 0% to ~30% with the full reflection loop.
+The reflection loop is the key driver of architecture coverage - understanding of core modules improves from 0% to ~30% with the full loop.
 
 ## Architecture
 
 ```
-clone_repo -> initialize_exploration -> plan_next_exploration <--+
-                                               |                  |
-                                          explore_files           |
-                                               |                  |
-                                           reflect ----[score < 0.8 AND iter < max]--+
-                                               |
-                                     [score >= 0.8 OR iter >= max]
-                                               |
-                                    synthesize -> validate --[errors]--> refine -> END
-                                                     |
-                                                 [no errors]
-                                                     |
-                                                    END
+clone_repo -> initialize_exploration -> index_repo -> plan_next_exploration <--+
+                                                             |                  |
+                                                       explore_files            |
+                                                             |                  |
+                                                          reflect ---[score < 0.8 AND iter < max]--+
+                                                             |
+                                               [score >= 0.8 OR iter >= max]
+                                                             |
+                                              synthesize -> validate --[errors]--> refine -> END
+                                                                |
+                                                           [no errors]
+                                                                |
+                                                               END
 ```
+
+**New in Phase 2:**
+- `index_repo`: FAISS + Neo4j initialization (runs once, between initialize and plan)
+- `plan_next_exploration`: now queries FAISS (semantic) + Neo4j (frontier + centrality) before calling GPT-4o
+- `explore_files`: syncs new import edges to Neo4j after each batch
 
 ## LLM routing
 
@@ -53,21 +82,21 @@ Two modes controlled by `LOCAL_LLM_BASE_URL` in `.env`:
 **Cloud mode** (default):
 - `gpt-4o` - planner, reflector, synthesizer, refiner
 - `gpt-4o-mini` - per-file summaries (~10x cheaper)
+- `text-embedding-3-small` - FAISS index (one call per run, ~$0.001)
 
 **Hybrid mode** (`LOCAL_LLM_BASE_URL=http://localhost:11434/v1`):
-- Fine-tuned Qwen2.5-7B via Ollama - planner, reflector, explorer (free, these nodes were fine-tuned)
-- `gpt-4o` - synthesizer, refiner (not fine-tuned, need strong instruction-following)
+- Fine-tuned Qwen2.5-7B via Ollama - planner, reflector, explorer
+- `gpt-4o` - synthesizer, refiner (always)
 - Cost: ~$0.04/repo (synthesis only)
 
 ## Fine-tuning
 
-Training data was collected by running the agent on 50 repos with GPT-4o, capturing every `(prompt, completion)` pair via LangChain `AsyncCallbackHandler`. 1,834 examples total (explorer=1,072, planner=381, reflector=381).
+Training data collected by running the agent on 50 repos with GPT-4o, capturing every `(prompt, completion)` pair. 1,834 examples (explorer=1,072, planner=381, reflector=381).
 
-Fine-tuned Qwen2.5-7B-Instruct with MLX LoRA on Apple Silicon. Best val loss 0.445 at iter 1800. Model fused and converted to Q4_K_M GGUF for Ollama serving.
+Fine-tuned Qwen2.5-7B-Instruct with MLX LoRA on Apple Silicon. Best val loss 0.445 at iter 1800. Fused and converted to Q4_K_M GGUF for Ollama serving.
 
-One-time setup:
 ```bash
-bash fine_tuning/fuse_and_convert.sh   # fuse adapter + convert to GGUF + register with Ollama
+bash fine_tuning/fuse_and_convert.sh   # one-time: fuse + convert + register with Ollama
 ```
 
 ## Setup
@@ -77,13 +106,13 @@ Requires [uv](https://github.com/astral-sh/uv), Python 3.11+, and Docker.
 ```bash
 uv sync --extra dev
 cp .env.example .env
-# Add OPENAI_API_KEY to .env
+# Set OPENAI_API_KEY, NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD in .env
 ```
 
 ## Running
 
 ```bash
-# Terminal 1 - Redis (required for API job persistence)
+# Terminal 1 - Redis + Neo4j
 docker-compose up
 
 # Terminal 2 - API server
@@ -93,9 +122,9 @@ uv run uvicorn src.api.main:app --reload
 cd frontend && npm install && npm run dev
 ```
 
-Open `http://localhost:5173`.
+Open `http://localhost:5173`. Neo4j browser at `http://localhost:7474`.
 
-## Running tests
+## Tests
 
 ```bash
 uv run pytest tests/
@@ -109,7 +138,7 @@ uv run python -m src.eval.benchmark --repos django/django    # single repo
 uv run python -m src.eval.benchmark --configs baseline full  # specific configs
 ```
 
-Results are saved to `eval/results.json` and served by the API at `GET /eval/results`. This file is gitignored - run the benchmark before using the frontend benchmark page.
+Results saved to `eval/results.json` (gitignored, regenerate before using benchmark page).
 
 ## Project phases
 
@@ -117,14 +146,17 @@ Results are saved to `eval/results.json` and served by the API at `GET /eval/res
 |---|---|---|
 | 1 - Core agent | Complete | clone, initialize, plan, explore, reflect nodes |
 | 2 - Synthesis + fine-tuning | Complete | synthesize, validate, refine + Qwen2.5-7B LoRA |
-| 3 - Eval framework | Complete | 20-repo ablation benchmark, metrics, LLM-as-judge |
+| 3 - Eval framework | Complete | 20-repo ablation, metrics, LLM-as-judge |
 | 4 - API + Frontend | Complete | FastAPI SSE streaming, Redis job store, React UI |
-| 5 - Deployment | Pending | Docker full stack, production config |
+| 5 - Knowledge Augmentation | Complete | RAG 2.0 (FAISS hybrid), GraphRAG (Neo4j), frontend viz |
+| 6 - Deployment | Pending | Docker full stack, production config |
 
 ## Tech stack
 
 - **Agent orchestration:** LangGraph 0.2+
-- **LLM framework:** LangChain 0.3+ with langchain-openai
+- **LLM framework:** LangChain 0.3+ with langchain-openai, langchain-community
+- **Vector search:** FAISS (langchain-community) + text-embedding-3-small
+- **Graph DB:** Neo4j 5 via official async driver - import graph as property graph
 - **API:** FastAPI + sse-starlette + Redis (job persistence + pub/sub streaming)
 - **Frontend:** React 18 + Vite + React Router + Tailwind CSS v4 + react-markdown
 - **Repo access:** GitPython

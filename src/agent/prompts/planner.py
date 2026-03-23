@@ -17,14 +17,14 @@ You are analyzing a code repository to build a developer onboarding guide.
 ## File Summaries (most recent):
 {file_summaries}
 
-## Most-Imported Files (import graph signal):
+## Most-Imported Files (centrality):
 {import_graph_summary}
-{focus_section}{reflection_section}
+{frontier_section}{semantic_section}{focus_section}{reflection_section}
 ## Task
 Select the next 3-5 files to read. Prioritize:
-1. Files most frequently imported by already-visited files (high architectural centrality)
-2. Files that address gaps identified in the reflection notes
-3. Entry points and core modules not yet visited
+1. Graph frontier files (directly imported by already-visited code, not yet read)
+2. Files returned by semantic search that match identified gaps
+3. High-centrality files (imported by many others) not yet visited
 
 Rules:
 - Only include files visible in the file tree above
@@ -43,7 +43,12 @@ class NextFilesToExplore(BaseModel):
     reasoning: str = Field(description="One sentence explaining why these files were chosen")
 
 
-def build_planner_prompt(state: RepoState) -> str:
+def build_planner_prompt(
+    state: RepoState,
+    semantic_candidates: list[str] | None = None,
+    neo4j_central: list[tuple[str, int]] | None = None,
+    neo4j_frontier: list[str] | None = None,
+) -> str:
     visited_str = (
         "\n".join(f"  - {f}" for f in state["visited_files"]) or "  None yet"
     )
@@ -65,6 +70,31 @@ def build_planner_prompt(state: RepoState) -> str:
         if state.get("reflection_notes")
         else ""
     )
+    visited = set(state["visited_files"])
+
+    semantic_section = (
+        "\n## Semantically Relevant Files (vector search for gaps):\n"
+        + "\n".join(f"  - {f}" for f in semantic_candidates if f not in visited)
+        + "\n"
+        if semantic_candidates
+        else ""
+    )
+
+    frontier_section = (
+        "\n## Graph Frontier (Neo4j - unvisited files imported by visited code):\n"
+        + "\n".join(f"  - {f}" for f in neo4j_frontier if f not in visited)
+        + "\n"
+        if neo4j_frontier
+        else ""
+    )
+
+    # Use Neo4j centrality when available, fall back to dict-based heuristic
+    if neo4j_central:
+        centrality_summary = "\n".join(
+            f"  {path}: imported {count}x" for path, count in neo4j_central
+        )
+    else:
+        centrality_summary = _format_import_graph(state["import_graph"])
 
     return PLAN_NEXT_EXPLORATION_PROMPT.format(
         repo_url=state["repo_url"],
@@ -74,7 +104,9 @@ def build_planner_prompt(state: RepoState) -> str:
         visited_count=len(state["visited_files"]),
         visited_files=visited_str,
         file_summaries=summaries_str,
-        import_graph_summary=_format_import_graph(state["import_graph"]),
+        import_graph_summary=centrality_summary,
+        frontier_section=frontier_section,
+        semantic_section=semantic_section,
         focus_section=focus_section,
         reflection_section=reflection_section,
     )

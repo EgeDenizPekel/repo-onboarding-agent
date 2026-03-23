@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
+import ImportGraphViz from '../components/ImportGraphViz'
 
 const API = '/api'
 
 const NODE_LABELS = {
   clone_repo: 'Cloning repository',
   initialize_exploration: 'Reading README & dependencies',
-  plan_next_exploration: 'Planning next files to explore',
+  index_repo: 'Building vector index + Neo4j graph',
+  plan_next_exploration: 'Planning next files (hybrid retrieval)',
   explore_files: 'Exploring files',
   reflect: 'Reflecting on understanding',
   synthesize: 'Synthesizing onboarding guide',
@@ -108,6 +110,38 @@ function IterationTrace({ iterationLog }) {
                   <p className="text-xs text-slate-400 leading-relaxed">{iter.reflection_notes}</p>
                 </div>
               )}
+
+              {(iter.semantic_candidates?.length > 0 || iter.frontier_files?.length > 0) && (
+                <div className="grid grid-cols-2 gap-3">
+                  {iter.semantic_candidates?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-indigo-400 mb-1.5">
+                        Semantic search (FAISS)
+                        <span className="font-normal text-slate-600 ml-1">{iter.semantic_candidates.length} candidates</span>
+                      </p>
+                      <div className="flex flex-col gap-1">
+                        {iter.semantic_candidates.map((f, fi) => (
+                          <span key={fi} className="text-xs font-mono text-indigo-300/70 bg-indigo-950/40 border border-indigo-900/40 px-2 py-0.5 rounded truncate">{f}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {iter.frontier_files?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-emerald-400 mb-1.5">
+                        Graph frontier (Neo4j)
+                        <span className="font-normal text-slate-600 ml-1">{iter.frontier_files.length} nodes</span>
+                      </p>
+                      <div className="flex flex-col gap-1">
+                        {iter.frontier_files.map((f, fi) => (
+                          <span key={fi} className="text-xs font-mono text-emerald-300/70 bg-emerald-950/40 border border-emerald-900/40 px-2 py-0.5 rounded truncate">{f}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {iter.architecture_notes_added?.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-slate-400 mb-2">Architecture insights</p>
@@ -220,6 +254,7 @@ function JobHistoryItem({ job }) {
 
   const iterLog = detail?.result?.iteration_log ?? []
   const doc = detail?.result?.onboarding_document
+  const importGraph = detail?.result?.import_graph ?? {}
 
   return (
     <div className="rounded-lg border border-slate-700/50 overflow-hidden">
@@ -273,6 +308,12 @@ function JobHistoryItem({ job }) {
               >
                 View Document
               </button>
+            </div>
+          )}
+
+          {detail && Object.keys(importGraph).length > 0 && (
+            <div className="border-t border-slate-800 pt-4">
+              <ImportGraphViz importGraph={importGraph} />
             </div>
           )}
         </div>

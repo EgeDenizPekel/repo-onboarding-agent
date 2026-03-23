@@ -1,7 +1,11 @@
+import uuid
 from typing import TypedDict
 
 
 class RepoState(TypedDict):
+    # Run identity (used to namespace Neo4j graph data)
+    run_id: str
+
     # Input
     repo_url: str
     focus_hint: str | None
@@ -27,6 +31,13 @@ class RepoState(TypedDict):
     iteration_count: int
     max_iterations: int
 
+    # Vector index
+    repo_indexed: bool
+
+    # Retrieval signals from last planner call (for iteration log + frontend display)
+    last_semantic_candidates: list[str]
+    last_frontier_files: list[str]
+
     # Output
     onboarding_draft: str
     validation_errors: list[str]
@@ -39,6 +50,7 @@ def create_initial_state(
     max_iterations: int = 8,
 ) -> RepoState:
     return RepoState(
+        run_id=str(uuid.uuid4()),
         repo_url=repo_url,
         focus_hint=focus_hint,
         repo_path="",
@@ -52,6 +64,9 @@ def create_initial_state(
         entry_points=[],
         architecture_notes=[],
         exploration_queue=[],
+        repo_indexed=False,
+        last_semantic_candidates=[],
+        last_frontier_files=[],
         understanding_score=0.0,
         reflection_notes="",
         iteration_count=0,

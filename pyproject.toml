@@ -16,6 +16,9 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "redis>=5.0",
     "sse-starlette>=2.1",
+    "langchain-community>=0.3",
+    "faiss-cpu>=1.7",
+    "neo4j>=5.0",
 ]
 
 [project.optional-dependencies]

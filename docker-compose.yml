@@ -7,5 +7,16 @@ services:
       - redis_data:/data
     command: redis-server --appendonly yes
 
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "7474:7474"   # Browser UI
+      - "7687:7687"   # Bolt protocol
+    environment:
+      NEO4J_AUTH: neo4j/repoagent123
+    volumes:
+      - neo4j_data:/data
+
 volumes:
   redis_data:
+  neo4j_data:

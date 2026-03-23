@@ -2,6 +2,7 @@ from langgraph.graph import END, StateGraph
 
 from src.agent.nodes.clone import clone_repo
 from src.agent.nodes.explorer import explore_files
+from src.agent.nodes.indexer import index_repo
 from src.agent.nodes.initialize import initialize_exploration
 from src.agent.nodes.planner import plan_next_exploration
 from src.agent.nodes.reflector import reflect
@@ -34,6 +35,7 @@ def build_graph():
 
     workflow.add_node("clone_repo", clone_repo)
     workflow.add_node("initialize_exploration", initialize_exploration)
+    workflow.add_node("index_repo", index_repo)
     workflow.add_node("plan_next_exploration", plan_next_exploration)
     workflow.add_node("explore_files", explore_files)
     workflow.add_node("reflect", reflect)
@@ -43,7 +45,8 @@ def build_graph():
 
     workflow.set_entry_point("clone_repo")
     workflow.add_edge("clone_repo", "initialize_exploration")
-    workflow.add_edge("initialize_exploration", "plan_next_exploration")
+    workflow.add_edge("initialize_exploration", "index_repo")
+    workflow.add_edge("index_repo", "plan_next_exploration")
     workflow.add_edge("plan_next_exploration", "explore_files")
     workflow.add_edge("explore_files", "reflect")
 

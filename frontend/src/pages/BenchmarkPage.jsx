@@ -196,6 +196,40 @@ export default function BenchmarkPage() {
         </div>
       </div>
 
+      {/* Phase 2: Knowledge Augmentation */}
+      <div className="mb-8 bg-slate-900 border border-slate-700 rounded-xl p-5">
+        <p className="text-sm font-semibold text-slate-200 mb-1">Phase 2: Knowledge Augmentation</p>
+        <p className="text-xs text-slate-500 leading-relaxed mb-4">
+          Built for Week 5-7 of the GenAI course. Grounds the agent in the repository's structure using hybrid retrieval, a Neo4j knowledge graph, and a custom LLM-as-a-Judge eval pipeline.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4">
+            <p className="text-xs font-semibold text-indigo-300 mb-2">Week 5 - RAG 2.0</p>
+            <ul className="space-y-1.5 text-xs text-slate-400 leading-relaxed">
+              <li><span className="text-slate-300">Self-correcting loop:</span> the reflect node scores understanding and identifies gaps; those gaps become the retrieval query for the next planner call</li>
+              <li><span className="text-slate-300">Hybrid search:</span> FAISS vector index (text-embedding-3-small) + keyword grep - both signals passed to the LLM for final file selection</li>
+              <li><span className="text-slate-300">Index node:</span> embeds all repo files (path + 300 char preview) once per run, ~$0.001</li>
+            </ul>
+          </div>
+          <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4">
+            <p className="text-xs font-semibold text-emerald-300 mb-2">Week 6 - GraphRAG</p>
+            <ul className="space-y-1.5 text-xs text-slate-400 leading-relaxed">
+              <li><span className="text-slate-300">Neo4j schema:</span> <code className="bg-slate-700 px-1 rounded">(:File)</code> nodes + <code className="bg-slate-700 px-1 rounded">[:IMPORTS]</code> edges, scoped per run via <code className="bg-slate-700 px-1 rounded">run_id</code></li>
+              <li><span className="text-slate-300">Centrality query:</span> in-degree count via Cypher replaces dict heuristic</li>
+              <li><span className="text-slate-300">Frontier query:</span> 1-hop unvisited neighbors of visited files - files confirmed reachable from explored code</li>
+            </ul>
+          </div>
+          <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4">
+            <p className="text-xs font-semibold text-amber-300 mb-2">Week 7 - LLM-as-a-Judge</p>
+            <ul className="space-y-1.5 text-xs text-slate-400 leading-relaxed">
+              <li><span className="text-slate-300">GPT-4o judge:</span> scores each document 1-5 on clarity, completeness, and usefulness; always a different model than the one evaluated</li>
+              <li><span className="text-slate-300">3 custom metrics:</span> architecture coverage, file ref accuracy, judge score - each measuring a distinct failure mode</li>
+              <li><span className="text-slate-300">Ablation study:</span> 20 repos x 3 configs isolates the effect of each component</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       {/* Agent graph + config cards side by side */}
       <div className="flex gap-6 mb-10 items-stretch">
         {/* Graph - 55% */}

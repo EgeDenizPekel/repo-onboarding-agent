@@ -10,6 +10,8 @@ import redis.asyncio as aioredis
 
 from src.agent.graph import build_graph
 from src.agent.state import create_initial_state
+from src.agent.tools.graph_tools import cleanup_run
+from src.agent.tools.vector_tools import clear_repo_index
 from src.api import jobs as job_store
 
 # Build graph once at module import (reused across jobs)
@@ -19,8 +21,10 @@ _graph = build_graph()
 async def run_job(client: aioredis.Redis, job_id: str, repo_url: str, focus_hint: str) -> None:
     await job_store.set_running(client, job_id)
 
+    initial_state = create_initial_state(repo_url, focus_hint=focus_hint or None)
+    run_id = initial_state["run_id"]
+
     try:
-        initial_state = create_initial_state(repo_url, focus_hint=focus_hint or None)
 
         iteration_log: list[dict] = []
         files_explored_this_iter: list[str] = []
@@ -61,6 +65,8 @@ async def run_job(client: aioredis.Redis, job_id: str, repo_url: str, focus_hint
                         "understanding_score": score,
                         "reflection_notes": updates.get("reflection_notes", ""),
                         "architecture_notes_added": new_notes,
+                        "semantic_candidates": list(final_state.get("last_semantic_candidates", [])),
+                        "frontier_files": list(final_state.get("last_frontier_files", [])),
                     })
                     files_explored_this_iter = []
 
@@ -87,6 +93,7 @@ async def run_job(client: aioredis.Redis, job_id: str, repo_url: str, focus_hint
             "framework": final_state.get("framework", ""),
             "entry_points": final_state.get("entry_points", []),
             "visited_files": list(final_state.get("visited_files", [])),
+            "import_graph": dict(final_state.get("import_graph", {})),
         }
 
         await job_store.set_complete(client, job_id, result)
@@ -101,3 +108,10 @@ async def run_job(client: aioredis.Redis, job_id: str, repo_url: str, focus_hint
             "event": "error",
             "message": str(e),
         })
+
+    finally:
+        # Free in-memory index and Neo4j graph data for this run
+        repo_path = initial_state.get("repo_path", "")
+        if repo_path:
+            clear_repo_index(repo_path)
+        await cleanup_run(run_id)
