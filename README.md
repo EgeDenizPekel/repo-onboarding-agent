@@ -6,6 +6,28 @@ Most LLM-based repo summarizers read a README and call it done. This agent actua
 
 Built as a portfolio project covering the full GenAI stack: agent design, fine-tuning, hybrid RAG (Phase 2), GraphRAG, and LLM-as-a-Judge evaluation.
 
+## Screenshots
+
+**Generate page** - Enter any GitHub URL, optionally add a focus hint, and watch the agent work in real time. The node timeline shows each step as it fires; on completion the full onboarding document opens in a side drawer.
+
+![Generate page](screenshots/generate.png)
+
+**Benchmark page - methodology and Phase 2 card** - The top section explains the ablation study methodology, fine-tuning setup, and the three Phase 2 techniques (RAG 2.0, GraphRAG, LLM-as-a-Judge) added for the GenAI course.
+
+![Benchmark page - top](screenshots/benchmark-top.png)
+
+**Benchmark page - agent graph and ablation charts** - The SVG agent graph shows which nodes activate per configuration (Baseline / No Reflection / Full). Below it, three bar charts compare architecture coverage, file reference accuracy, and judge score across all three configs for all 20 benchmark repos.
+
+![Benchmark page - agent graph and charts](screenshots/benchmark-graph.png)
+
+**Benchmark page - per-repository results table** - Every repo in the benchmark with all three metrics per configuration. Rows link through to the repo detail page.
+
+![Benchmark page - results table](screenshots/benchmark-table.png)
+
+**Repo detail page (django/django)** - Three-column layout showing baseline, no-reflection, and full configs side by side. Each column shows its metrics, judge reasoning, and an expandable iteration stepper with reflection traces per iteration.
+
+![Repo detail page](screenshots/repo-detail.png)
+
 ## What it does
 
 Point it at any GitHub repo URL. The agent:
